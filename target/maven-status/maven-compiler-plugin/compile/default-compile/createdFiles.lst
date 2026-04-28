@@ -1,0 +1,5 @@
+com\example\codeanalyzer\Models$Submission.class
+com\example\codeanalyzer\Main.class
+com\example\codeanalyzer\Models$AnalysisResult.class
+com\example\codeanalyzer\Models.class
+com\example\codeanalyzer\AnalyzerService.class
