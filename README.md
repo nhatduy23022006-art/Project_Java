@@ -1,58 +1,58 @@
-# Code Analyzer (Java)
+# Code Analyzer
 
-Ứng dụng Java để nhập các nick Codeforces, crawl code định kỳ, sử dụng AI để phân tích CTDL/thuật toán và đánh giá mức độ sử dụng AI. **Sử dụng MySQL trên XAMPP**.
+Ứng dụng Java Swing để dán code, đưa vào hàng đợi và phân tích tự động bằng Gemini. Chương trình hiển thị danh sách các đoạn code đã thêm, trạng thái xử lý, điểm đánh giá cấu trúc dữ liệu, thuật toán, mức độ nghi ngờ dùng AI và cho phép xem lại nội dung từng submission.
 
-Tính năng hiện có:
-- Nhập handle Codeforces.
-- **Xóa handle**: Chọn handle trong tab `Handles`, bấm `Delete Handle` (xóa cascade: handle + submissions + analyses)
-- Crawl định kỳ mỗi 24 giờ (bấm `Start Scheduler`) và crawl thủ công (bấm `Crawl Now`).
-- Crawl Codeforces: lấy metadata từ API, cố gắng scrape source code.
-- Lưu submissions và phân tích AI vào MySQL.
-- Chống trùng dữ liệu theo `submissionId`.
-- Tổng hợp đánh giá theo nick: số bài đã phân tích, điểm CTDL, điểm thuật toán, điểm nghi vấn dùng AI.
-- GUI gồm 3 tab:
-  - **Handles**: Danh sách các nick đã thêm (có thể Delete)
-  - **Evaluations**: Tổng hợp điểm trung bình theo nick
-  - **Submissions**: Xem chi tiết từng submission (chọn handle từ dropdown, bấm `View Code` để xem source code)
+## Tính năng
 
-Yêu cầu:
-- Java 11+
+- Dán code trực tiếp vào ô nhập liệu và bấm `Add` để đưa vào hàng đợi.
+- Bấm `Check Pending` để phân tích toàn bộ item đang ở trạng thái chờ.
+- Xem chi tiết từng item bằng nút `View` trong bảng.
+- Hiển thị kết quả gồm `DS`, `Algo`, `AI`, `Used AI` và `Confidence`.
+- Nếu không có API key, ứng dụng vẫn chạy bằng heuristic nội bộ, nhưng sẽ không gọi Gemini.
+
+## Yêu cầu
+
+- Java 11 trở lên
 - Maven
-- XAMPP (MySQL chạy)
-- Biến môi trường `OPENAI_API_KEY` (để bật chức năng phân tích AI)
+- Biến môi trường `GEMINI_API_KEY` nếu muốn dùng Gemini thật
+- Tuỳ chọn: `GEMINI_MODEL` để đổi model, mặc định là `gemini-2.5-flash`
 
-Setup MySQL trên XAMPP:
+## Chạy ứng dụng
 
-1. Chạy XAMPP, bật MySQL.
-2. Mở browser vào `http://localhost/phpmyadmin/` hoặc dùng MySQL CLI:
-
-```sql
-CREATE DATABASE code_analyzer CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-Cài đặt & chạy:
-
-1. Build:
+### 1. Build
 
 ```bash
 mvn clean compile
 ```
 
-2. Chạy (với MySQL XAMPP mặc định):
+### 2. Chạy trên Windows PowerShell
 
 ```powershell
-$env:OPENAI_API_KEY="your_openai_api_key"
-$env:DB_HOST="localhost"
-$env:DB_PORT="3306"
-$env:DB_NAME="code_analyzer"
-$env:DB_USER="root"
-$env:DB_PASS=""
-mvn exec:java "-Dexec.mainClass=com.example.codeanalyzer.Main"
+$env:GEMINI_API_KEY="your_gemini_api_key"
+$env:GEMINI_MODEL="gemini-2.5-flash"
+mvn exec:java
 ```
 
-Nếu bạn đã config MySQL khác, tuỳ chỉnh các biến trên.
+### 3. Chạy trên Command Prompt
 
-Ghi chú:
-- Codeforces crawler sử dụng API (`user.status`) để lấy metadata và cố gắng scrape trang submission để lấy source code. Code có thể không luôn khả dụng do quyền hiển thị.
-- Analyzer gọi OpenAI Chat Completions API. Bạn cần cung cấp `OPENAI_API_KEY`. Kết quả phân tích kỳ vọng JSON gồm: `ds`, `algorithms`, `usedAI`, `confidence`, `dsScore`, `algoScore`, `aiScore`.
-- Scheduler mặc định đặt lịch mỗi 24 giờ. Để test nhanh, sửa khoảng thời gian trong `Main`.
+```bat
+set GEMINI_API_KEY=your_gemini_api_key
+set GEMINI_MODEL=gemini-2.5-flash
+mvn exec:java
+```
+
+Nếu không muốn gọi Gemini, chỉ cần bỏ qua biến `GEMINI_API_KEY`. Ứng dụng sẽ chạy ở chế độ heuristic, phù hợp để test giao diện và luồng xử lý cơ bản.
+
+## Cách dùng
+
+1. Mở ứng dụng sau khi chạy lệnh `mvn exec:java`.
+2. Dán đoạn code cần phân tích vào ô bên trái.
+3. Bấm `Add` để thêm vào hàng đợi.
+4. Bấm `Check Pending` để phân tích các item chưa xử lý.
+5. Bấm `View` trong bảng để xem lại toàn bộ code và kết quả chi tiết.
+
+## Ghi chú kỹ thuật
+
+- Entry point của ứng dụng là `com.example.codeanalyzer.Main`.
+- Logic gọi Gemini nằm trong `AnalyzerService`.
+- Dữ liệu đầu ra mong đợi từ model là JSON với các khóa: `ds`, `algorithms`, `usedAI`, `confidence`, `dsScore`, `algoScore`, `aiScore`.
