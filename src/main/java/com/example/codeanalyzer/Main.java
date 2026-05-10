@@ -31,20 +31,22 @@ public class Main {
         }
     };
     private final DefaultTableModel accountTableModel = new DefaultTableModel(
-            new String[]{"ID", "Platform", "Handle", "Last submission"}, 0) {
+            new String[]{"ID", "Platform", "Handle", "Last submission", "Xóa"}, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
-            return false;
+            return column == 4;
         }
     };
+
     private final List<Models.CodeforcesSubmission> currentSubmissions = new ArrayList<>();
     private final DefaultTableModel submissionTableModel = new DefaultTableModel(
-            new String[]{"ID", "Contest", "Bài", "Ngôn ngữ", "Kết quả", "Xem Code", "Phân tích AI"}, 0) {
+            new String[]{"ID", "Contest", "Bài", "Ngôn ngữ", "Kết quả", "Xem Code", "Phân tích AI", "Xóa"}, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
-            return column == 5 || column == 6;
+            return column == 5 || column == 6 || column == 7;
         }
     };
+
 
     private Main(AnalyzerService analyzer, DatabaseService database) {
         this.analyzer = analyzer;
@@ -64,6 +66,9 @@ public class Main {
         submissionTable.getColumnModel().getColumn(5).setCellEditor(new ButtonColumnEditor(submissionTable, this::showSourceCodeDialog));
         submissionTable.getColumnModel().getColumn(6).setCellRenderer(new ButtonColumnRenderer("Phân tích AI"));
         submissionTable.getColumnModel().getColumn(6).setCellEditor(new ButtonColumnEditor(submissionTable, this::addSubmissionToQueue));
+        submissionTable.getColumnModel().getColumn(7).setCellRenderer(new ButtonColumnRenderer("Xóa"));
+        submissionTable.getColumnModel().getColumn(7).setCellEditor(new ButtonColumnEditor(submissionTable, this::deleteSubmissionAction));
+
         JScrollPane submissionScroll = new JScrollPane(submissionTable);
 
         resultArea.setEditable(false);
@@ -73,6 +78,9 @@ public class Main {
 
         accountTable = new JTable(accountTableModel);
         accountTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        accountTable.getColumnModel().getColumn(4).setCellRenderer(new ButtonColumnRenderer("Xóa"));
+        accountTable.getColumnModel().getColumn(4).setCellEditor(new ButtonColumnEditor(accountTable, this::deleteAccountAction));
+
         accountTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 int row = accountTable.getSelectedRow();
@@ -83,6 +91,7 @@ public class Main {
             }
         });
         JScrollPane accountScroll = new JScrollPane(accountTable);
+
         accountScroll.setPreferredSize(new Dimension(360, 130));
 
         JTable queueTable = new JTable(queueTableModel);
@@ -364,9 +373,10 @@ public class Main {
             currentSubmissions.addAll(list);
             for (Models.CodeforcesSubmission sub : list) {
                 submissionTableModel.addRow(new Object[]{
-                    sub.submissionId, sub.contestId, sub.problemIndex, sub.language, sub.verdict, "Xem Code", sub.isAnalyzed ? "Xem phân tích" : "Phân tích AI"
+                    sub.submissionId, sub.contestId, sub.problemIndex, sub.language, sub.verdict, "Xem Code", sub.isAnalyzed ? "Xem phân tích" : "Phân tích AI", "Xóa"
                 });
             }
+
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(null, "Lỗi tải danh sách bài nộp: " + ex.getMessage());
         }
@@ -423,6 +433,47 @@ public class Main {
         queueTableModel.addRow(toRow(entry));
     }
 
+    private void deleteAccountAction(int rowIndex) {
+        long accountId = (long) accountTableModel.getValueAt(rowIndex, 0);
+        String handle = (String) accountTableModel.getValueAt(rowIndex, 2);
+        
+        int choice = JOptionPane.showConfirmDialog(mainFrame, 
+            "Bạn có chắc chắn muốn xóa tài khoản '" + handle + "'?\nToàn bộ bài nộp và phân tích liên quan sẽ bị xóa.", 
+            "Xác nhận xóa", JOptionPane.YES_NO_OPTION);
+            
+        if (choice == JOptionPane.YES_OPTION) {
+            try {
+                database.deleteAccount(accountId);
+                refreshAccounts();
+                submissionTableModel.setRowCount(0);
+                currentSubmissions.clear();
+                resultArea.setText("Đã xóa tài khoản " + handle + ".\n");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(mainFrame, "Lỗi khi xóa tài khoản: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void deleteSubmissionAction(int rowIndex) {
+        if (rowIndex < 0 || rowIndex >= currentSubmissions.size()) return;
+        Models.CodeforcesSubmission sub = currentSubmissions.get(rowIndex);
+        
+        int choice = JOptionPane.showConfirmDialog(mainFrame, 
+            "Bạn có chắc chắn muốn xóa bài nộp #" + sub.submissionId + "?", 
+            "Xác nhận xóa", JOptionPane.YES_NO_OPTION);
+            
+        if (choice == JOptionPane.YES_OPTION) {
+            try {
+                database.deleteSubmission(sub.databaseId);
+                loadSubmissions(sub.handle);
+                resultArea.setText("Đã xóa bài nộp #" + sub.submissionId + ".\n");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(mainFrame, "Lỗi khi xóa bài nộp: " + ex.getMessage());
+            }
+        }
+    }
+
+
     private void refreshAccounts() {
         accountTableModel.setRowCount(0);
         if (!database.isAvailable()) {
@@ -434,8 +485,10 @@ public class Main {
                         account.id,
                         account.platform,
                         account.handle,
-                        account.lastSubmissionId > 0 ? account.lastSubmissionId : ""
+                        account.lastSubmissionId > 0 ? account.lastSubmissionId : "",
+                        "Xóa"
                 });
+
             }
         } catch (Exception ex) {
             accountTableModel.addRow(new Object[]{"", "Lỗi tải danh sách", ex.getMessage(), ""});
@@ -592,6 +645,8 @@ public class Main {
 
     @SuppressWarnings("serial")
     private static final class ButtonColumnRenderer extends JButton implements TableCellRenderer {
+        private static final long serialVersionUID = 1L;
+
         private ButtonColumnRenderer(String text) {
             setText(text);
         }
@@ -605,7 +660,9 @@ public class Main {
 
     @SuppressWarnings("serial")
     private static final class ButtonColumnEditor extends AbstractCellEditor implements TableCellEditor {
+        private static final long serialVersionUID = 1L;
         private final JButton button = new JButton("Xem");
+
         private int row = -1;
 
         private ButtonColumnEditor(JTable table, RowAction action) {

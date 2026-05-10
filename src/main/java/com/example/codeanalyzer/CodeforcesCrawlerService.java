@@ -15,6 +15,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -22,9 +23,9 @@ import java.util.Comparator;
 import java.util.List;
 
 public class CodeforcesCrawlerService {
-    private static final int MAX_SUBMISSIONS_PER_ACCOUNT = 50;
+    private static final int MAX_SUBMISSIONS_PER_ACCOUNT = 10;
     private static final int API_DELAY_MS = 2200;
-    private static final int PAGE_DELAY_MS = 1200;
+    private static final int PAGE_DELAY_MS = 2000;
 
     private final DatabaseService database;
     private final HttpClient http = HttpClient.newBuilder()
@@ -56,7 +57,8 @@ public class CodeforcesCrawlerService {
                     try {
                         source = fetchSourceCode(parent, driver, submission);
                     } catch (RuntimeException ex) {
-                        System.err.println("Skip Codeforces submission " + submission.submissionId + ": " + ex.getMessage());
+                        System.err.println(
+                                "Skip Codeforces submission " + submission.submissionId + ": " + ex.getMessage());
                         continue;
                     }
                     if (source == null || source.isBlank()) {
@@ -88,7 +90,8 @@ public class CodeforcesCrawlerService {
         HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
         JSONObject root = new JSONObject(resp.body());
         if (!"OK".equalsIgnoreCase(root.optString("status"))) {
-            throw new IllegalStateException("Codeforces API lỗi với " + account.handle + ": " + root.optString("comment"));
+            throw new IllegalStateException(
+                    "Codeforces API lỗi với " + account.handle + ": " + root.optString("comment"));
         }
 
         List<Models.CodeforcesSubmission> out = new ArrayList<>();
@@ -132,7 +135,8 @@ public class CodeforcesCrawlerService {
         }
 
         try {
-            // Thay vì điều hướng (gây ra lỗi Cloudflare), ta dùng JS fetch ngầm từ trang hiện tại (đã được xác minh)
+            // Thay vì điều hướng (gây ra lỗi Cloudflare), ta dùng JS fetch ngầm từ trang
+            // hiện tại (đã được xác minh)
             String js = "var callback = arguments[arguments.length - 1];"
                     + "fetch('" + url + "')"
                     + ".then(response => response.text())"
@@ -153,7 +157,8 @@ public class CodeforcesCrawlerService {
 
             driver.manage().timeouts().scriptTimeout(Duration.ofSeconds(30));
             @SuppressWarnings("unchecked")
-            java.util.Map<String, Object> result = (java.util.Map<String, Object>) ((JavascriptExecutor) driver).executeAsyncScript(js);
+            java.util.Map<String, Object> result = (java.util.Map<String, Object>) ((JavascriptExecutor) driver)
+                    .executeAsyncScript(js);
 
             if (result == null) {
                 throw new IllegalStateException("Kết quả JS fetch bị null");
@@ -172,10 +177,12 @@ public class CodeforcesCrawlerService {
                 JOptionPane.showMessageDialog(parent, "Cloudflare đang chặn fetch ngầm!\n"
                         + "Vui lòng F5 (tải lại) trang web hiện tại trên Edge và xác minh Cloudflare,\n"
                         + "sau đó bấm OK ở đây để thử lại.");
-                // Thử lại đệ quy 1 lần (hoặc có thể dùng vòng lặp, ở đây throw để skip hoặc user thử lại)
+                // Thử lại đệ quy 1 lần (hoặc có thể dùng vòng lặp, ở đây throw để skip hoặc
+                // user thử lại)
                 throw new IllegalStateException("Bị Cloudflare chặn Ajax fetch. Hãy tải lại trang và xác minh.");
             } else if ("NOT_FOUND".equals(status)) {
-                throw new IllegalStateException("Không tìm thấy thẻ source code trong HTML trả về. (Preview: " + data.replace("\n", " ") + ")");
+                throw new IllegalStateException(
+                        "Không tìm thấy thẻ source code trong HTML trả về. (Preview: " + data.replace("\n", " ") + ")");
             } else {
                 throw new IllegalStateException("JS fetch lỗi: " + data);
             }
@@ -190,21 +197,18 @@ public class CodeforcesCrawlerService {
 
         if ("chrome".equalsIgnoreCase(browser)) {
             org.openqa.selenium.chrome.ChromeOptions options = new org.openqa.selenium.chrome.ChromeOptions();
-            
+
             String driverPath = firstNonBlank(
                     System.getenv("CHROME_DRIVER_PATH"),
                     System.getenv("WEBDRIVER_CHROME_DRIVER"),
                     System.getenv("WEBDRIVER_PATH"),
-                    System.getProperty("webdriver.chrome.driver")
-            );
-            if (driverPath != null) {
-                validateDriverPath(driverPath);
+                    System.getProperty("webdriver.chrome.driver"));
+            if (driverPath != null && Files.exists(Path.of(driverPath))) {
                 System.setProperty("webdriver.chrome.driver", driverPath);
             }
 
             String chromeBinary = firstNonBlank(
-                    System.getenv("CHROME_BINARY_PATH")
-            );
+                    System.getenv("CHROME_BINARY_PATH"));
             if (chromeBinary != null) {
                 options.setBinary(chromeBinary);
             }
@@ -212,12 +216,12 @@ public class CodeforcesCrawlerService {
             options.setExperimentalOption("excludeSwitches", java.util.Collections.singletonList("enable-automation"));
             options.setExperimentalOption("useAutomationExtension", false);
             options.addArguments("--disable-blink-features=AutomationControlled");
-            options.addArguments("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+            options.addArguments(
+                    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
             options.addArguments("--start-maximized");
 
             String profileDir = firstNonBlank(
-                    System.getenv("CODEFORCES_CHROME_PROFILE_DIR")
-            );
+                    System.getenv("CODEFORCES_CHROME_PROFILE_DIR"));
             if (profileDir != null && !profileDir.isBlank()) {
                 options.addArguments("--user-data-dir=" + profileDir.trim());
             }
@@ -226,64 +230,52 @@ public class CodeforcesCrawlerService {
         }
 
         EdgeOptions options = new EdgeOptions();
-        
-        // 1. Cấu hình đường dẫn Driver (Giữ nguyên logic của bạn)
+
+        // 1. Cấu hình đường dẫn Driver
         String driverPath = firstNonBlank(
                 System.getenv("EDGE_DRIVER_PATH"),
                 System.getenv("MSEDGEDRIVER_PATH"),
                 System.getenv("WEBDRIVER_EDGE_DRIVER"),
                 System.getenv("WEBDRIVER_PATH"),
                 System.getProperty("webdriver.edge.driver"),
-                "drivers/msedgedriver.exe"
-        );
-        if (driverPath != null) {
-            validateDriverPath(driverPath);
+                "drivers/msedgedriver.exe");
+
+        if (driverPath != null && Files.exists(Path.of(driverPath))) {
             System.setProperty("webdriver.edge.driver", driverPath);
+        } else {
+
+            // Nếu không tìm thấy driver cục bộ, Selenium 4 Manager sẽ tự động tải về
+            System.out.println("Local EdgeDriver not found or not specified. Selenium Manager will handle it.");
         }
 
         // 2. Cấu hình Binary (Giữ nguyên logic của bạn)
         String edgeBinary = firstNonBlank(
                 System.getenv("EDGE_BINARY_PATH"),
-                System.getenv("MSEDGE_BINARY_PATH")
-        );
+                System.getenv("MSEDGE_BINARY_PATH"));
         if (edgeBinary != null) {
             options.setBinary(edgeBinary);
         }
 
         // --- 3. PHẦN NGỤY TRANG (QUAN TRỌNG NHẤT ĐỂ LÁCH CLOUDFLARE) ---
-        
+
         // Loại bỏ dòng chữ "Chrome/Edge is being controlled by automated test software"
         options.setExperimentalOption("excludeSwitches", java.util.Collections.singletonList("enable-automation"));
         options.setExperimentalOption("useAutomationExtension", false);
-        
+
         // Ẩn biến navigator.webdriver (Xóa dấu vết Selenium)
         options.addArguments("--disable-blink-features=AutomationControlled");
-        
+
         options.addArguments("--start-maximized");
 
         // --- 4. Cấu hình Profile (Giữ nguyên logic của bạn) ---
         String profileDir = firstNonBlank(
                 System.getenv("CODEFORCES_EDGE_PROFILE_DIR"),
-                System.getenv("CODEFORCES_CHROME_PROFILE_DIR")
-        );
+                System.getenv("CODEFORCES_CHROME_PROFILE_DIR"));
         if (profileDir != null && !profileDir.isBlank()) {
             options.addArguments("--user-data-dir=" + profileDir.trim());
         }
 
         return new EdgeDriver(options);
-    }
-
-    private void validateDriverPath(String driverPath) {
-        Path path = Path.of(driverPath);
-        if (!Files.exists(path)) {
-            throw new IllegalStateException("Không tìm thấy EdgeDriver tại " + driverPath);
-        }
-        if (!Files.isRegularFile(path)) {
-            throw new IllegalStateException("EdgeDriver không phải file thường: " + driverPath);
-        }
-        if (!Files.isExecutable(path)) {
-            throw new IllegalStateException("EdgeDriver chưa có quyền chạy. Hãy chạy: chmod +x " + driverPath);
-        }
     }
 
     private String firstNonBlank(String... values) {
