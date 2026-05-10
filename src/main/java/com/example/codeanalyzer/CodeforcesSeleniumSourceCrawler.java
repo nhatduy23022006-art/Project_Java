@@ -61,29 +61,22 @@ public class CodeforcesSeleniumSourceCrawler {
         }
     }
 
-private static WebDriver createDriver(String browser, String driverPath) {
+    private static WebDriver createDriver(String browser, String driverPath) {
         if ("chrome".equalsIgnoreCase(browser)) {
-            if (driverPath != null) {
+            if (driverPath != null && java.nio.file.Files.exists(java.nio.file.Path.of(driverPath))) {
                 System.setProperty("webdriver.chrome.driver", driverPath);
             }
             ChromeOptions options = new ChromeOptions();
-            
             options.setExperimentalOption("excludeSwitches", java.util.Collections.singletonList("enable-automation"));
             options.setExperimentalOption("useAutomationExtension", false);
             options.addArguments("--disable-blink-features=AutomationControlled");
-            
             options.addArguments("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            
             options.addArguments("--start-maximized");
-            options.addArguments("--disable-extensions");
-            options.addArguments("--no-sandbox");
-            options.addArguments("--disable-dev-shm-usage");
-
             return new ChromeDriver(options);
         }
 
         if ("edge".equalsIgnoreCase(browser)) {
-            if (driverPath != null) {
+            if (driverPath != null && java.nio.file.Files.exists(java.nio.file.Path.of(driverPath))) {
                 System.setProperty("webdriver.edge.driver", driverPath);
             }
             EdgeOptions options = new EdgeOptions();
@@ -93,6 +86,7 @@ private static WebDriver createDriver(String browser, String driverPath) {
 
         throw new IllegalArgumentException("Trình duyệt không hỗ trợ: " + browser);
     }
+
 
     private static void login(WebDriver driver, WebDriverWait wait, String username, String password) {
         WebElement usernameInput = wait.until(ExpectedConditions.elementToBeClickable(

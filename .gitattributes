@@ -1,0 +1,4 @@
+# Force GitHub to recognize this as a Java project
+*.html linguist-documentation
+*.html linguist-detectable=false
+*.java linguist-detectable=true

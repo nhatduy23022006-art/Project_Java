@@ -1,48 +1,76 @@
-# Hướng Dẫn Cài Đặt và Chạy Chương Trình (Dành cho Giảng viên)
+# HƯỚNG DẪN CÀI ĐẶT VÀ SỬ DỤNG HỆ THỐNG PHÂN TÍCH MÃ NGUỒN
 
-Dự án này sử dụng Java Swing, SQLite và tích hợp AI Gemini để phân tích mã nguồn Codeforces. Dưới đây là các bước để thầy/cô có thể chạy chương trình trên môi trường Windows.
+Tài liệu này hướng dẫn chi tiết các bước để thiết lập và kiểm tra đồ án **"Hệ thống tự động Crawl và Phân tích mã nguồn Codeforces bằng AI"**.
+
+---
 
 ## 1. Yêu cầu hệ thống
-Thầy/cô cần cài đặt sẵn các công cụ sau:
-- **Java JDK 11** hoặc phiên bản mới hơn.
-- **Maven** (Để quản lý thư viện và build dự án).
-- **Trình duyệt Edge** (Dùng để Crawl dữ liệu qua Selenium).
+Trước khi bắt đầu, hãy đảm bảo máy tính đã cài đặt:
+- **Java JDK 11** trở lên.
+- **Apache Maven** (để quản lý thư viện và chạy dự án).
+- **Trình duyệt**: Microsoft Edge (Khuyến nghị) hoặc Google Chrome.
 
-## 2. Tải mã nguồn
-Thầy/cô có thể clone dự án từ GitHub bằng lệnh sau:
-```powershell
-git clone https://github.com/nhatduy23022006-art/Project_Java.git
-cd Project_Java
-```
+---
 
-## 3. Cấu hình API Key (Bắt buộc)
-Để tính năng AI hoạt động, chương trình cần sử dụng **Google Gemini API Key**. 
-Thầy/cô vui lòng thực hiện các bước sau trong cửa sổ **PowerShell**:
+## 2. Cấu hình Gemini API Key (Bắt buộc)
+Để tính năng phân tích AI hoạt động, thầy/cô cần cung cấp API Key của Google Gemini.
+
+1. Mở **PowerShell** và di chuyển vào thư mục dự án.
+2. Chạy lệnh sau (thay `KEY_CỦA_BẠN` bằng API Key thực tế):
 
 ```powershell
-# Thiết lập Key (Thay bằng Key của thầy/cô)
-$env:GEMINI_API_KEY = "AIzaSy..." 
-
-# Thiết lập Model (Mặc định là gemini-1.5-flash)
-$env:GEMINI_MODEL = "gemini-1.5-flash"
+$env:GEMINI_API_KEY = "KEY_CỦA_BẠN"
 ```
 
-## 4. Khởi chạy chương trình
-Sau khi đã thiết lập API Key trong PowerShell, thầy/cô chạy lệnh sau để khởi động ứng dụng:
+*Lưu ý: Nếu không thiết lập Key, chương trình vẫn chạy được các tính năng Crawl và xem dữ liệu cũ, nhưng tính năng "Phân tích AI" sẽ báo lỗi.*
+
+---
+
+## 3. Cách khởi chạy chương trình
+Dự án được thiết kế để chạy ngay lập tức mà không cần cài đặt Database phức tạp. Thầy/cô chỉ cần chạy lệnh duy nhất sau trong thư mục dự án:
 
 ```powershell
 mvn clean compile exec:java
 ```
 
-## 5. Lưu ý về Cơ sở dữ liệu
-Dự án sử dụng **SQLite**, vì vậy thầy/cô **KHÔNG CẦN** cài đặt thêm MySQL hay bất kỳ database server nào khác. 
-- Toàn bộ dữ liệu demo (Nick đã cào, bài nộp, kết quả phân tích) đã được tích hợp sẵn trong file `code_analyzer.db`. 
-- Khi mở ứng dụng lên, các Nick và bài nộp sẽ tự động hiển thị để thầy/cô có thể kiểm tra ngay lập tức.
+---
 
-## 6. Các tính năng chính để kiểm tra:
-1. **Đánh giá năng lực**: Chọn một tài khoản (ví dụ: `Redial`) và bấm nút **"Đánh giá năng lực"** để xem báo cáo tổng quan.
-2. **Xem phân tích AI**: Bấm vào nút **"Xem phân tích"** ở danh sách bài nộp để xem AI đánh giá mã nguồn về CTDL/Thuật toán và mức độ nghi vấn sử dụng AI.
-3. **Crawl dữ liệu**: Nhập một Nick Codeforces mới và bấm **"Crawl Codeforces"** (Hệ thống sẽ tự động bypass Cloudflare).
+## 4. Lưu ý về Cơ sở dữ liệu (SQLite)
+Dự án sử dụng **SQLite**, một hệ quản trị CSDL dạng file nhẹ.
+- **Không cần cài MySQL**: Toàn bộ dữ liệu được lưu trong file `code_analyzer.db`.
+- **Dữ liệu Demo**: Tôi đã tích hợp sẵn một số tài khoản (ví dụ: `Redial`, `tourist`) và các bài nộp đã được phân tích AI để thầy/cô có thể kiểm tra ngay lập tức mà không cần crawl mới.
+
+---
+
+## 5. Cơ chế Crawl dữ liệu (Tự động & Thông minh)
+Hệ thống crawl của dự án đã được tối ưu hóa để tránh các lỗi phổ biến:
+
+### 🛠️ Giải quyết lỗi Driver (Tự động)
+Trước đây, người dùng thường gặp lỗi: *"Crawl thất bại: Không tìm thấy EdgeDriver tại drivers/msedgedriver.exe"*. 
+- **Hiện tại**: Tôi đã tích hợp **Selenium Manager**. Chương trình sẽ tự động nhận diện phiên bản trình duyệt trên máy thầy/cô và **tự động tải driver tương ứng** về. Thầy/cô không cần phải tải hay copy file `.exe` thủ công vào thư mục dự án nữa.
+
+### 🛡️ Vượt rào cản Cloudflare
+Codeforces sử dụng Cloudflare để chặn Bot. Hệ thống này xử lý bằng cách:
+1. Mở một cửa sổ trình duyệt Edge thật.
+2. Nếu gặp Cloudflare, thầy/cô chỉ cần tích chọn "Xác minh là người" trong cửa sổ đó.
+3. Sau khi xác minh xong, bấm **OK** trên hộp thoại của chương trình Java để bắt đầu cào dữ liệu ngầm.
+
+### ⏳ Giới hạn an toàn (Anti-Ban)
+Để tránh bị Codeforces chặn IP, hệ thống được cấu hình:
+- Chỉ lấy tối đa **10 bài nộp mới nhất** mỗi lần.
+- Nghỉ **2 giây** giữa mỗi lần lấy mã nguồn.
+- Nghỉ **2.2 giây** giữa các lần gọi API.
+
+---
+
+## 6. Các tính năng chính cần kiểm tra
+Thầy/cô có thể trải nghiệm các tính năng theo thứ tự sau:
+
+1.  **Đánh giá năng lực**: Chọn tài khoản `Redial` ở bảng trên -> Bấm **"Đánh giá năng lực"** để xem báo cáo tổng quan.
+2.  **Xem phân tích chi tiết**: Tại bảng dưới, bấm **"Xem phân tích"** của một bài nộp bất kỳ để xem Gemini đánh giá mã nguồn.
+3.  **Quản lý dữ liệu**:
+    *   **Xóa**: Có thể xóa từng bài nộp hoặc xóa hẳn một tài khoản (Handle) kèm dữ liệu liên quan bằng nút **Xóa** ở cuối mỗi dòng.
+    *   **Crawl mới**: Nhập một Handle Codeforces bất kỳ (VD: `vjudge1`) -> Bấm **"Lưu nick"** -> Bấm **"Crawl Codeforces"**.
 
 ---
 *Sinh viên thực hiện: [Tên của bạn]*

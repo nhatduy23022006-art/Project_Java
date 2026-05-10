@@ -382,6 +382,42 @@ public class DatabaseService {
 
         return eval;
     }
+    public void deleteSubmission(long submissionDbId) throws SQLException {
+        String sql = "DELETE FROM submissions WHERE id = ?";
+        try (Connection conn = openConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, submissionDbId);
+            ps.executeUpdate();
+        }
+    }
+
+    public void deleteAccount(long accountId) throws SQLException {
+        try (Connection conn = openConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                // Delete submissions first (which will cascade to analyses)
+                String deleteSubmissionsSql = "DELETE FROM submissions WHERE account_id = ?";
+                try (PreparedStatement ps = conn.prepareStatement(deleteSubmissionsSql)) {
+                    ps.setLong(1, accountId);
+                    ps.executeUpdate();
+                }
+                
+                // Delete the account
+                String deleteAccountSql = "DELETE FROM accounts WHERE id = ?";
+                try (PreparedStatement ps = conn.prepareStatement(deleteAccountSql)) {
+                    ps.setLong(1, accountId);
+                    ps.executeUpdate();
+                }
+                
+                conn.commit();
+            } catch (SQLException ex) {
+                conn.rollback();
+                throw ex;
+            } finally {
+                conn.setAutoCommit(true);
+            }
+        }
+    }
+
 
     private Connection openConnection() throws SQLException {
         if (isSQLite) {
