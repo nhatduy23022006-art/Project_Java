@@ -27,6 +27,10 @@ public class AnalyzerService {
         this.geminiModel = (envModel == null || envModel.isBlank()) ? DEFAULT_GEMINI_MODEL : envModel.trim();
     }
 
+    public String getGeminiModel() {
+        return geminiModel;
+    }
+
     public Models.AnalysisResult analyzeCode(Models.Submission s) {
         if (s == null) {
             Models.Submission empty = new Models.Submission();
@@ -144,9 +148,12 @@ public class AnalyzerService {
 
     private String buildAnalysisPrompt(String code) {
         return "You are a code reviewer for competitive programming. "
-                + "Analyze this source code and return ONLY valid JSON (no markdown code block) with keys: "
+                + "Analyze this source code and return ONLY valid compact JSON (no markdown code block) with keys: "
                 + "ds(string), algorithms(string), usedAI(string yes/no/uncertain), confidence(number 0..1), "
-                + "dsScore(number 0..10), algoScore(number 0..10), aiScore(number 0..10 where higher means more likely AI generated).\n"
+                + "dsScore(number 0..10), algoScore(number 0..10), aiScore(number 0..10 where higher means more likely AI generated). "
+                + "Keep ds and algorithms short: use comma-separated names only, no explanations, no full sentences. "
+                + "Examples: ds=\"vector\", algorithms=\"sorting, binary search\". "
+                + "Use common short labels such as array, vector, list, map, set, queue, stack, heap, graph, tree, sorting, binary search, greedy, DP, BFS, DFS.\n"
                 + "Code:\n" + code;
     }
 
@@ -215,9 +222,6 @@ public class AnalyzerService {
         return allText.toString().trim();
     }
 
-    private Models.AnalysisResult analyzeWithHeuristic(Models.Submission s) {
-        return analyzeWithHeuristic(s, null);
-    }
 
     private Models.AnalysisResult analyzeWithHeuristic(Models.Submission s, String fallbackReason) {
         Models.AnalysisResult out = new Models.AnalysisResult();

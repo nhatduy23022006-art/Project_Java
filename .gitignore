@@ -1,0 +1,35 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+*.iws
+.settings/
+.classpath
+.project
+.metadata/
+bin/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Application
+*.log
+database.db
+code_analyzer.db
+run.ps1
+run.bat
+edge_driver/
+msedgedriver.exe
