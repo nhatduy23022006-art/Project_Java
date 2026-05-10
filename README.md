@@ -19,7 +19,7 @@ Dự án Java giúp cào mã nguồn từ Codeforces, lưu trữ vào cơ sở d
 Tạo một file chạy (ví dụ `run_app.ps1` trên Windows hoặc `run_app.sh` trên Linux) và thiết lập các biến môi trường sau:
 
 ```powershell
-$env:GEMINI_API_KEY = "KEY_CUA_BAN_TAI_DAY"
+$env:GEMINI_API_KEY = "AIzaSyDPT-aod9LF1_FQ1VsdVoTkmSLMU1wc1ww"
 $env:GEMINI_MODEL = "gemini-2.5-flash"
 mvn exec:java
 ```
