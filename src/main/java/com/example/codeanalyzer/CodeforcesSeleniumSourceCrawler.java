@@ -23,7 +23,7 @@ public class CodeforcesSeleniumSourceCrawler {
         String username = firstNonBlank(System.getenv("CF_USERNAME"), systemProperty("cf.username"));
         String password = firstNonBlank(System.getenv("CF_PASSWORD"), systemProperty("cf.password"));
         String browser = firstNonBlank(System.getenv("BROWSER"), systemProperty("browser"), "chrome");
-        String driverPath = firstNonBlank(System.getenv("WEBDRIVER_PATH"), systemProperty("webdriver.path"));
+        String driverPath = firstNonBlank(System.getenv("WEBDRIVER_PATH"), systemProperty("webdriver.path"), "drivers/msedgedriver.exe");
 
         if (username == null || password == null) {
             System.out.println("Thiếu CF_USERNAME/CF_PASSWORD hoặc -Dcf.username/-Dcf.password.");

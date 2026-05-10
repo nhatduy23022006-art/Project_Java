@@ -233,7 +233,8 @@ public class CodeforcesCrawlerService {
                 System.getenv("MSEDGEDRIVER_PATH"),
                 System.getenv("WEBDRIVER_EDGE_DRIVER"),
                 System.getenv("WEBDRIVER_PATH"),
-                System.getProperty("webdriver.edge.driver")
+                System.getProperty("webdriver.edge.driver"),
+                "drivers/msedgedriver.exe"
         );
         if (driverPath != null) {
             validateDriverPath(driverPath);
