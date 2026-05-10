@@ -28,7 +28,6 @@ Desktop.ini
 # Application
 *.log
 database.db
-code_analyzer.db
 run.ps1
 run.bat
 edge_driver/
