@@ -1,8 +1,6 @@
 package com.example.codeanalyzer;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Run this tool to migrate data from MySQL to SQLite.
