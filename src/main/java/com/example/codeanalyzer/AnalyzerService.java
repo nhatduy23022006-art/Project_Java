@@ -9,17 +9,23 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.Locale;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Semaphore;
 
 public class AnalyzerService {
     private static final String DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
     private static final int HTTP_TIMEOUT_SECONDS = 20;
-    private static final int MAX_RETRIES = 5;
-    private static final long[] RETRY_BACKOFF_MS = {1000L, 2000L, 4000L, 8000L, 16000L};
+    private static final int MAX_RETRIES = 1; // Gọi 1 lần duy nhất
+    private static final long[] RETRY_BACKOFF_MS = {30000L}; // Chỉ có 1 phần tử
+    private static final long RATE_LIMIT_DELAY_MS = 30000L; // 60 giây delay giữa các request
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final String geminiKey;
     private final String geminiModel;
+    private final Map<String, Models.AnalysisResult> cache = new HashMap<>();
+    private long lastRequestTime = 0;
+    private final Semaphore requestSemaphore = new Semaphore(1); // Chỉ cho phép 1 request cùng lúc
 
     public AnalyzerService(String geminiKey) {
         this.geminiKey = geminiKey;
@@ -31,33 +37,54 @@ public class AnalyzerService {
         return geminiModel;
     }
 
-    public Models.AnalysisResult analyzeCode(Models.Submission s) {
+    public void clearCache() {
+        cache.clear();
+    }
+
+    public int getCacheSize() {
+        return cache.size();
+    }
+
+    public Models.AnalysisResult analyzeCode(Models.Submission s) throws IOException, InterruptedException {
         if (s == null) {
-            Models.Submission empty = new Models.Submission();
-            return analyzeWithHeuristic(empty, "invalid_submission");
+            throw new IllegalArgumentException("Submission cannot be null");
         }
 
         if (geminiKey == null || geminiKey.isBlank()) {
-            return analyzeWithHeuristic(s, "missing_gemini_key");
+            throw new IllegalArgumentException("Gemini API key is not configured");
         }
 
         if (s.code == null || s.code.isBlank()) {
             return emptyAnalysis(s.submissionId);
         }
 
-        String prompt = buildAnalysisPrompt(s.code);
-        JSONObject body = buildGeminiRequestBody(prompt);
+        // Kiểm tra cache trước
+        String cacheKey = generateCacheKey(s.code);
+        if (cache.containsKey(cacheKey)) {
+            Models.AnalysisResult cached = cache.get(cacheKey);
+            cached.submissionId = s.submissionId; // Update submission ID
+            System.out.println("Cache hit for submission " + s.submissionId);
+            return cached;
+        }
 
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent?key=" + geminiKey))
-                .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(HTTP_TIMEOUT_SECONDS))
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-                .build();
+        // Chờ semaphore để đảm bảo chỉ 1 request cùng lúc
+        requestSemaphore.acquire();
+        try {
+            // Áp dụng rate limiting (chờ 60 giây trước khi gọi)
+            applyRateLimit();
 
-        String lastFallbackReason = "gemini_unknown_error";
+            System.out.println("Calling Gemini API for submission " + s.submissionId + "...");
+            
+            String prompt = buildAnalysisPrompt(s.code);
+            JSONObject body = buildGeminiRequestBody(prompt);
 
-        for (int attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create("https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent?key=" + geminiKey))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(HTTP_TIMEOUT_SECONDS))
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                    .build();
+
             try {
                 HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
                 int status = resp.statusCode();
@@ -67,20 +94,20 @@ public class AnalyzerService {
                 try {
                     respJson = new JSONObject(responseBody);
                 } catch (Exception ex) {
-                    return analyzeWithHeuristic(s, "gemini_invalid_response");
+                    throw new RuntimeException("Failed to parse Gemini response as JSON", ex);
                 }
 
                 if (status == 200) {
                     String content = extractGeminiContent(respJson);
                     if (content.isBlank()) {
-                        return analyzeWithHeuristic(s, "gemini_blank_content");
+                        throw new RuntimeException("Gemini returned blank content");
                     }
 
                     JSONObject j;
                     try {
                         j = extractJsonObject(content);
                     } catch (Exception ex) {
-                        return analyzeWithHeuristic(s, "gemini_invalid_content_json");
+                        throw new RuntimeException("Failed to extract JSON object from Gemini content", ex);
                     }
 
                     Models.AnalysisResult out = new Models.AnalysisResult();
@@ -91,34 +118,35 @@ public class AnalyzerService {
                     out.dsScore = clamp(j.optDouble("dsScore", 0.0), 0.0, 10.0);
                     out.algoScore = clamp(j.optDouble("algoScore", 0.0), 0.0, 10.0);
                     out.aiScore = clamp(j.optDouble("aiScore", 0.0), 0.0, 10.0);
+                    
+                    // Lưu vào cache
+                    Models.AnalysisResult toCache = new Models.AnalysisResult();
+                    toCache.submissionId = 0; // Placeholder
+                    toCache.dsAndAlgos = out.dsAndAlgos;
+                    toCache.usedAI = out.usedAI;
+                    toCache.confidence = out.confidence;
+                    toCache.dsScore = out.dsScore;
+                    toCache.algoScore = out.algoScore;
+                    toCache.aiScore = out.aiScore;
+                    cache.put(cacheKey, toCache);
+                    
+                    System.out.println("API call successful for submission " + s.submissionId);
                     return out;
                 }
 
-                if (status == 429) {
-                    lastFallbackReason = "gemini_quota_or_rate_limited";
-                    if (!sleepBeforeRetry(attempt)) {
-                        return analyzeWithHeuristic(s, "gemini_interrupted");
-                    }
-                    continue;
-                }
-
-                lastFallbackReason = mapGeminiHttpError(respJson, status);
-                return analyzeWithHeuristic(s, lastFallbackReason);
+                // Nếu không phải 200, throw lỗi (không retry)
+                String errorMsg = mapGeminiHttpError(respJson, status);
+                throw new RuntimeException("Gemini API error (status " + status + "): " + errorMsg);
+                
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return analyzeWithHeuristic(s, "gemini_interrupted");
+                throw e;
             } catch (IOException e) {
-                lastFallbackReason = "gemini_network_error";
-                if (attempt == MAX_RETRIES - 1) {
-                    break;
-                }
-                if (!sleepBeforeRetry(attempt)) {
-                    return analyzeWithHeuristic(s, "gemini_interrupted");
-                }
+                throw new RuntimeException("Network error calling Gemini API", e);
             }
+        } finally {
+            requestSemaphore.release();
         }
-
-        return analyzeWithHeuristic(s, lastFallbackReason + "_retries_exhausted");
     }
 
     private boolean sleepBeforeRetry(int attempt) {
@@ -132,6 +160,23 @@ public class AnalyzerService {
             Thread.currentThread().interrupt();
             return false;
         }
+    }
+
+    private synchronized void applyRateLimit() throws InterruptedException {
+        long now = System.currentTimeMillis();
+        long timeSinceLastRequest = now - lastRequestTime;
+        
+        if (timeSinceLastRequest < RATE_LIMIT_DELAY_MS) {
+            long waitTime = RATE_LIMIT_DELAY_MS - timeSinceLastRequest;
+            Thread.sleep(waitTime);
+        }
+        
+        lastRequestTime = System.currentTimeMillis();
+    }
+
+    private String generateCacheKey(String code) {
+        // Sử dụng hash code của code làm cache key
+        return "code_" + Integer.toHexString(code.hashCode());
     }
 
     private Models.AnalysisResult emptyAnalysis(long submissionId) {
@@ -222,106 +267,6 @@ public class AnalyzerService {
         return allText.toString().trim();
     }
 
-
-    private Models.AnalysisResult analyzeWithHeuristic(Models.Submission s, String fallbackReason) {
-        Models.AnalysisResult out = new Models.AnalysisResult();
-        out.submissionId = s.submissionId;
-
-        if (s.code == null || s.code.isBlank()) {
-            out.dsAndAlgos = "(no source)";
-            out.usedAI = "unknown";
-            out.confidence = 0.0;
-            out.dsScore = 0.0;
-            out.algoScore = 0.0;
-            out.aiScore = 0.0;
-            return out;
-        }
-
-        String code = s.code.toLowerCase(Locale.ROOT);
-
-        boolean hasVector = code.contains("vector<") || code.contains("arraylist") || code.contains("list<");
-        boolean hasArray = code.contains("int[]") || code.contains("long[]") || code.contains("char[]") || code.contains("new int[");
-
-        boolean hasMap = code.contains("map<") || code.contains("unordered_map") || code.contains("hashmap") || code.contains("dict");
-        boolean hasSet = code.contains("set<") || code.contains("unordered_set") || code.contains("hashset") || code.contains("set(");
-
-        boolean hasQueue = code.contains("queue<") || code.contains("priority_queue") || code.contains("deque<") || code.contains("pq");
-        boolean hasStack = code.contains("stack<") || code.contains(" stack");
-
-        boolean hasTree = code.contains("treenode") || code.contains("node*") || code.contains("struct node") || (code.contains("left") && code.contains("right"));
-        boolean hasGraph = code.contains("adj[") || code.contains("adjacency") || code.contains("graph") || code.contains("dfs") || code.contains("bfs");
-        boolean hasLinkedList = code.contains("listnode") || code.contains("linkedlist") || code.contains("next");
-
-        boolean hasSort = code.contains("sort(") || code.contains("arrays.sort") || code.contains("collections.sort") || code.contains("qsort");
-        boolean hasBfs = code.contains("bfs") || code.contains("breadth") || (code.contains("queue") && code.contains("visited"));
-        boolean hasDfs = code.contains("dfs") || code.contains("depth") || (code.contains("recurs") && code.contains("visited"));
-        boolean hasDp = code.contains("dp[") || code.contains("dynamic programming") || code.contains("memo") || code.contains("bottom-up") || code.contains("top-down");
-        boolean hasBinarySearch = code.contains("binary_search") || (code.contains("mid") && code.contains("left") && code.contains("right"));
-        boolean hasDijkstra = code.contains("dijkstra") || (code.contains("shortest") && code.contains("path"));
-        boolean hasGreedy = code.contains("greedy") || (code.contains("sort") && code.contains("for") && code.length() > 200);
-        boolean hasBacktracking = code.contains("backtrack") || (code.contains("recurs") && code.contains("return") && code.contains("false"));
-        boolean hasUnionFind = code.contains("union") || code.contains("find(") || code.contains("parent[");
-
-        StringBuilder ds = new StringBuilder();
-        if (hasArray) ds.append("array, ");
-        if (hasVector) ds.append("vector/list, ");
-        if (hasMap) ds.append("hashmap, ");
-        if (hasSet) ds.append("hashset, ");
-        if (hasQueue) ds.append("queue/heap, ");
-        if (hasStack) ds.append("stack, ");
-        if (hasTree) ds.append("tree, ");
-        if (hasGraph) ds.append("graph, ");
-        if (hasLinkedList) ds.append("linked list, ");
-
-        StringBuilder alg = new StringBuilder();
-        if (hasSort) alg.append("sorting, ");
-        if (hasBfs) alg.append("BFS, ");
-        if (hasDfs) alg.append("DFS, ");
-        if (hasDp) alg.append("DP, ");
-        if (hasBinarySearch) alg.append("binary search, ");
-        if (hasDijkstra) alg.append("dijkstra, ");
-        if (hasGreedy) alg.append("greedy, ");
-        if (hasBacktracking) alg.append("backtracking, ");
-        if (hasUnionFind) alg.append("union-find, ");
-
-        String dsText = trimComma(ds.length() == 0 ? "basic types" : ds.toString());
-        String algText = trimComma(alg.length() == 0 ? "implementation/brute force" : alg.toString());
-
-        double dsScore = Math.min(10.0, countTrue(hasArray, hasVector, hasMap, hasSet, hasQueue, hasStack, hasTree, hasGraph, hasLinkedList) * 1.1);
-        double algoScore = Math.min(10.0, countTrue(hasSort, hasBfs, hasDfs, hasDp, hasBinarySearch, hasDijkstra, hasGreedy, hasBacktracking, hasUnionFind) * 1.1);
-
-        int aiSignal = 0;
-        if (code.contains("chatgpt") || code.contains("generated by ai") || code.contains("openai") || code.contains("claude")) aiSignal += 5;
-        if ((code.contains("# explanation") || code.contains("// explanation") || (code.contains("/*") && code.contains("solution")))) aiSignal += 2;
-        if (code.contains("time complexity") && code.contains("space complexity")) aiSignal += 2;
-        if (code.contains("approach:") || code.contains("algorithm:")) aiSignal += 1;
-        if (code.contains("this solution") || code.contains("this approach")) aiSignal += 1;
-        if (s.code.length() > 8000 && (code.contains("# ") || code.contains("//"))) aiSignal += 1;
-
-        if (countTrue(hasMap, hasSet, hasQueue, hasTree, hasGraph, hasDijkstra, hasUnionFind, hasDp) >= 4) {
-            if (code.contains("import") || code.contains("using namespace")) {
-                aiSignal -= 1;
-            }
-        }
-
-        double aiScore = Math.min(10.0, aiSignal * 1.5);
-        String usedAI;
-        if (aiScore >= 7) {
-            usedAI = "likely (heuristic)";
-        } else if (aiScore <= 2) {
-            usedAI = "no (heuristic)";
-        } else {
-            usedAI = "uncertain (heuristic)";
-        }
-
-        out.dsAndAlgos = "ds:" + dsText + "; alg:" + algText;
-        out.usedAI = usedAI;
-        out.confidence = 0.50;
-        out.dsScore = dsScore;
-        out.algoScore = algoScore;
-        out.aiScore = Math.max(0, aiScore);
-        return out;
-    }
 
     private int countTrue(boolean... values) {
         int c = 0;
