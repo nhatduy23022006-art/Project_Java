@@ -16,8 +16,7 @@ import java.util.concurrent.Semaphore;
 public class AnalyzerService {
     private static final String DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
     private static final int HTTP_TIMEOUT_SECONDS = 20;
-    private static final int MAX_RETRIES = 1; // Gọi 1 lần duy nhất
-    private static final long[] RETRY_BACKOFF_MS = {30000L}; // Chỉ có 1 phần tử
+
     private static final long RATE_LIMIT_DELAY_MS = 30000L; // 60 giây delay giữa các request
 
     private final HttpClient http = HttpClient.newHttpClient();
@@ -149,18 +148,7 @@ public class AnalyzerService {
         }
     }
 
-    private boolean sleepBeforeRetry(int attempt) {
-        if (attempt >= RETRY_BACKOFF_MS.length) {
-            return false;
-        }
-        try {
-            Thread.sleep(RETRY_BACKOFF_MS[attempt]);
-            return true;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
-    }
+
 
     private synchronized void applyRateLimit() throws InterruptedException {
         long now = System.currentTimeMillis();
@@ -268,21 +256,7 @@ public class AnalyzerService {
     }
 
 
-    private int countTrue(boolean... values) {
-        int c = 0;
-        for (boolean v : values) {
-            if (v) c++;
-        }
-        return c;
-    }
 
-    private String trimComma(String s) {
-        String out = s.trim();
-        if (out.endsWith(",")) {
-            return out.substring(0, out.length() - 1).trim();
-        }
-        return out;
-    }
 
     private JSONObject extractJsonObject(String text) {
         String raw = text == null ? "" : text.trim();
